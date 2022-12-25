@@ -13,7 +13,7 @@ import (
 	"net/http/httptest"
 	"net/textproto"
 	"net/url"
-	"os"
+	//"os"
 	"path"
 	"path/filepath"
 	"strings"
@@ -192,25 +192,40 @@ func (r *httpRequest) encodeMultipart() (io.Reader, error) {
 		return nil, fmt.Errorf("invalid body: %v", r.body)
 	}
 	for _, value := range values {
+		//fmt.Printf("values: %v\n", value)
 		for fieldName, ifileName := range value {
+			//fmt.Printf("ifileName: %v\n", ifileName)
 			fileName, ok := ifileName.(string)
 			if !ok {
 				return nil, fmt.Errorf("invalid body: %v", r.body)
 			}
 			b, err := readFile(filepath.Join(r.root, fileName))
-			if err != nil && !errors.Is(err, os.ErrNotExist) {
-				return nil, err
-			}
+			//if err != nil && !errors.Is(err, os.ErrNotExist) {
+			//	fmt.Printf("err type: %v\n", err.Error)
+			//	return nil, err
+			//}
 			h := make(textproto.MIMEHeader)
-			if errors.Is(err, os.ErrNotExist) {
+			//if errors.Is(err, os.ErrNotExist) || errors.Is(err, *fs.PathError) {
+			if err != nil {
 				b = []byte(fileName)
 				h.Set("Content-Disposition",
 					fmt.Sprintf(`form-data; name="%s"`, quoteEscaper.Replace(fieldName)))
 			} else {
+				//fmt.Println("fileName: " + fileName)
 				h.Set("Content-Disposition",
 					fmt.Sprintf(`form-data; name="%s"; filename="%s"`,
 						quoteEscaper.Replace(fieldName), quoteEscaper.Replace(filepath.Base(fileName))))
-				h.Set("Content-Type", http.DetectContentType(b))
+				detectedType := http.DetectContentType(b)
+				//fmt.Println("DetectContentType: " + detectedType)
+				contentType := detectedType
+				if detectedType == "text/plain; charset=utf-8" {
+					switch filepath.Ext(fileName) {
+						case ".csv":
+							contentType = "text/csv"
+					}
+				}
+				//fmt.Println("ContentType: " + contentType)
+				h.Set("Content-Type", contentType)
 			}
 			fw, err := mw.CreatePart(h)
 			if err != nil {
